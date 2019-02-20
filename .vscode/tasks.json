@@ -1,0 +1,17 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "build author-topic",
+            "type": "shell",
+            "command": "g++",
+            "args": [
+                "-g","/Users/ngokchaoho/Desktop/author-topic/SourceCode/author_topic.cc","-o","author_topic"
+            ],
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            }
+        }
+    ]
+}

@@ -336,4 +336,3 @@ int main(int argc, char** argv){
   t.sampling_all();
   t.output(filename);
 }
-
