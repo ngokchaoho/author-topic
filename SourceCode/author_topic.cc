@@ -1,4 +1,4 @@
-#include "common.cc"
+#include "tool.cpp"
 #include "progress.hpp"
 using namespace std;
 
