@@ -1,4 +1,4 @@
-#include "common.cc"
+#include "tool.cpp"
 #include "progress.hpp"
 using namespace std;
 
@@ -8,13 +8,12 @@ public:
   AuthorTopic(){
   }
   //constructor definition
-  AuthorTopic(double a, double b, int t, int loop, int show_limit){
-    this->alpha = a;
-    this->beta = b;
+  AuthorTopic(double a, double b, int t, int loop){
+    this->_alpha = a;
+    this->_beta = b;
 	//topic size
-    this->t = t;
-    this->loop_count = loop;
-    this->show_limit = show_limit;
+    this->_t = t;
+    this->_loop_count = loop;
     srand(time(0));
   }
 
@@ -65,14 +64,14 @@ public:
     _documents.push_back(word_ids);
 
     // set random authors
-    vector<int> hidden_authors;
+    vector<int> chosen_authors;
     // set random topics
     vector<int> topics;
 
     for(int i = 0; i < word_ids.size(); ++i){
       int word_id = word_ids.at(i);
       // select a random number from 0 to topic_size - 1
-      int init_topic = rand() % this->t;
+      int init_topic = rand() % this->_t;
       int random_author = rand() % author_ids.size();
 
       // increment
@@ -84,15 +83,15 @@ public:
       // the topics sequence record for this document
       topics.push_back(init_topic);
       // the author sequence record for this document
-      hidden_authors.push_back(random_author);
+      chosen_authors.push_back(random_author);
     }
     //the topics sequence record for all documents
     _topics.push_back(topics);
     //the authors sequence record for all documents
-    _hidden_authors.push_back(hidden_authors);
+    _chosen_authors.push_back(chosen_authors);
   }
 
-  double sampling_prob(int author_id, int word_id, int topic_id){
+  double sampling_cdf(int author_id, int word_id, int topic_id){
     int v = _words.size();
     unordered_map<key, int, myhash, myeq>::iterator i;
 
@@ -106,25 +105,20 @@ public:
       c_at_count = _c_at[make_pair(author_id, topic_id)];
     }
     //formula (5) and (6)
-    double prob = (c_wt_count + this->beta) / (_sum_c_wt[topic_id] + v * this -> beta);
-    prob *= (c_at_count + this->alpha) / (_sum_c_at[author_id] + this->t * this -> alpha);
+    double cdf = (c_wt_count + this->_beta) / (_sum_c_wt[topic_id] + v * this -> _beta);
+    cdf *= (c_at_count + this->_alpha) / (_sum_c_at[author_id] + this->_t * this -> _alpha);
 
-    return prob;
+    return cdf;
   }
 
   void sampling(int pos_doc, int pos_word){
     int word_id = (_documents.at(pos_doc)).at(pos_word);
     int prev_topic = (_topics.at(pos_doc)).at(pos_word);
-    int prev_author = (_hidden_authors.at(pos_doc)).at(pos_word);
+    int prev_author = (_chosen_authors.at(pos_doc)).at(pos_word);
     //authors for this document
     vector<int> authors = _author_ids.at(pos_doc);
-
-    // vector contains prob density
-    // image
-    //  |------t_1-----|---t_2---|-t_3-|------t_4-----|
-    // 0.0                ^^                         1.0
     // CDF for a word assigned to a author topic pair
-    vector<double> prob;
+    vector<double> cdf;
     //
     vector<pair<int, int> > topic_author_pairs;
 
@@ -141,12 +135,12 @@ public:
       --_c_at[make_pair(author_id, prev_topic)];
       --_sum_c_at[author_id];
 
-      for(int topic_id = 0; topic_id < this->t; ++topic_id){
-	      double now_prob = sampling_prob(author_id, word_id, topic_id);
-	      prob.push_back(now_prob);
+      for(int topic_id = 0; topic_id < this->_t; ++topic_id){
+	      double now_cdf = sampling_cdf(author_id, word_id, topic_id);
+	      cdf.push_back(now_cdf);
         //Make it a CDF
-	      if(prob.size() > 1){
-	        prob.at(prob.size() - 1) += prob.at(prob.size() - 2);
+	      if(cdf.size() > 1){
+	        cdf.at(cdf.size() - 1) += cdf.at(cdf.size() - 2);
 	      }
         //record topic author calibrated
 	      topic_author_pairs.push_back(make_pair(topic_id, author_id));
@@ -158,18 +152,18 @@ public:
     }
 
     // scaling [0,  1], as (5) and (6) may not be two independent pdf
-    double sum = prob.at(prob.size() - 1);
-    for(int i = 0; i < (this->t * authors.size()); ++i){
-      prob.at(i) /= sum;
+    double sum = cdf.at(cdf.size() - 1);
+    for(int i = 0; i < (this->_t * authors.size()); ++i){
+      cdf.at(i) /= sum;
     }
     
-    double pos_prob = uniform_rand();
+    double pos_cdf = uniform_rand();
     int new_topic = 0;
     int new_author = 0;
-    //check if > prob at 0 else use the intial condition which is both 0
-    if(pos_prob > prob.at(0)){
-      for(int i = 1; i < (this->t * authors.size()); ++i){
-	      if((pos_prob <= prob.at(i)) && (pos_prob > prob.at(i - 1))){
+    //check if > cdf at 0 else use the intial condition which is both 0
+    if(pos_cdf > cdf.at(0)){
+      for(int i = 1; i < (this->_t * authors.size()); ++i){
+	      if((pos_cdf <= cdf.at(i)) && (pos_cdf > cdf.at(i - 1))){
 	        pair<int, int> new_elem = topic_author_pairs.at(i);
 	        new_topic = new_elem.first;
 	        new_author = new_elem.second;
@@ -180,9 +174,9 @@ public:
 
     // update
     (_topics.at(pos_doc)).at(pos_word) = new_topic;
-    (_hidden_authors.at(pos_doc)).at(pos_word) = new_author;
+    (_chosen_authors.at(pos_doc)).at(pos_word) = new_author;
 
-    // decrement
+    // decrement, as word topic is already decreased in the beginning
     --_c_at[make_pair(prev_author, prev_topic)];
     --_sum_c_at[prev_author];
 
@@ -195,11 +189,11 @@ public:
 
   void sampling_all(){
     //giving expected_count as input
-    boost::progress_display progress( this->loop_count * this->_documents.size() );
+    boost::progress_display progress( this->_loop_count * this->_documents.size() );
     //show total elapsed time
     boost::progress_timer cpu_time;
     //i:iterator for required iteration
-    for(int i = 0; i < this->loop_count; ++i){
+    for(int i = 0; i < this->_loop_count; ++i){
       //pos_doc:iterator looping through all documents
       for(int pos_doc = 0; pos_doc <  _documents.size(); ++pos_doc){
 	      for(int pos_word = 1; pos_word < (_documents.at(pos_doc)).size(); ++pos_word){
@@ -211,10 +205,10 @@ public:
     }
   }
 
-  void output(char* filename){
+  void output(string filename){
     // output theta
     ostringstream oss_theta;
-    oss_theta << filename << "_theta" ;
+    oss_theta << filename << "_theta.tsv" ;
     ofstream ofs_theta;
     ofs_theta.open((oss_theta.str()).c_str());
 
@@ -223,56 +217,45 @@ public:
     unordered_map<key, double, myhash, myeq> all_theta;
     
     for(int author_id = 0; author_id < _authors.size(); ++author_id){
-      // sort
+      //theta for a specific author: cdfability and topic id
       vector<pair<double, int> > theta;
-      for(int topic_id = 0; topic_id < this->t ; ++topic_id){
+      for(int topic_id = 0; topic_id < this->_t ; ++topic_id){
 	      int c_at_count = 0;
 	      if(_c_at.find(make_pair(author_id, topic_id)) != _c_at.end()){
 	        c_at_count = _c_at[make_pair(author_id, topic_id)];
 	      }
-	      double score = (c_at_count + this->alpha)/(_sum_c_at[author_id] + this->t * this -> alpha);
+	      double score = (c_at_count + this->_alpha)/(_sum_c_at[author_id] + this->_t * this -> _alpha);
 	      theta.push_back(make_pair(score, topic_id));
 	      all_theta[make_pair(author_id, topic_id)] = score;
       }
 
       // output
+      // sort in aescending order
       sort(theta.begin(), theta.end());
       vector<pair<double, int> >::reverse_iterator j;
       int count = 0;
       for(j = theta.rbegin(); j != theta.rend(); ++j){
-	      if(count >= this->show_limit){
-	        break;
-	      } else{
 	      ofs_theta << _authors.at(author_id) << "\t" << (*j).second << "\t" << (*j).first << endl;
 	      count++;
-	      }
       }
     }
     ofs_theta.close();
 
     // output phi
     ostringstream oss_phi;
-    oss_phi << filename << "_phi" ;
+    oss_phi << filename << "_phi.tsv" ;
     ofstream ofs_phi;
     ofs_phi.open((oss_phi.str()).c_str());
 
-    for(int topic_id = 0; topic_id < this->t; ++topic_id){
-      // sort
+    for(int topic_id = 0; topic_id < this->_t; ++topic_id){
       vector<pair<double, string> > phi;
       for(int word_id = 0; word_id < _words.size(); ++word_id){
 	      int c_wt_count = 0;
 	      if(_c_wt.find(make_pair(word_id, topic_id)) != _c_wt.end()){
 	        c_wt_count = _c_wt[make_pair(word_id, topic_id)];
 	      }
-	    double score = (c_wt_count + this->beta)/(_sum_c_wt[topic_id] + _words.size() * this -> beta);
+	    double score = (c_wt_count + this->_beta)/(_sum_c_wt[topic_id] + _words.size() * this -> _beta);
 	    phi.push_back(make_pair(score, _words.at(word_id)));
-      }
-
-      // sort all theta
-      vector<pair<double, string> > topic_given_theta;
-      for(int author_id = 0; author_id < _authors.size(); ++author_id){
-	      double score = all_theta[make_pair(author_id, topic_id)];
-	      topic_given_theta.push_back(make_pair(score, _authors.at(author_id)));
       }
 
       // output
@@ -280,27 +263,19 @@ public:
       vector<pair<double, string> >::reverse_iterator j;
       int count = 0;
       for(j = phi.rbegin(); j != phi.rend(); ++j){
-	      if(count >= this->show_limit){
-	        break;
-	      } else{
-	        ofs_phi << topic_id << "\t" << (*j).second << "\t" << (*j).first << endl;
-	        count++;
-	      }
-      }
-      sort(topic_given_theta.begin(), topic_given_theta.end());
-      count = 0;
-      for(j = topic_given_theta.rbegin(); j != topic_given_theta.rend(); ++j){
-	      if(count >= this->show_limit){
-	        break;
-	      }else{
-	        count++;
-	      }
+	      ofs_phi << topic_id << "\t" << (*j).second << "\t" << (*j).first << endl;
+	      count++;
       }
     }
     ofs_phi.close();
   }
   
 private:
+  // params
+  double _alpha;
+  double _beta;
+  int _t;
+  int _loop_count;
   // key: <word_id, topic_id>
   // value: # of assign
   // http://www.cplusplus.com/reference/unordered_map/unordered_map/
@@ -311,44 +286,40 @@ private:
   // value: # of assign
   unordered_map<key, int, myhash, myeq> _c_at;
 
-  // uniq author
+  // uniq author dict
   vector<string> _authors;
-  // uniq words
+  // uniq words dict
   vector<string> _words;
 
-  // vector of author_id, ...
+  // vector of author_id, each elements available author for each document
   vector<vector<int> > _author_ids;
 
-  // vector of word_id, ...
+  // vector of word_id, each elements avaialble word in each
   vector<vector<int> > _documents;
   
-  // vector of word_topic_id, ...
+  // vector of word_topic_id
   vector<vector<int> > _topics;
 
-  // vector of author_id, ...
-  vector<vector<int> > _hidden_authors;
-
+  // vector of author_id
+  vector<vector<int> > _chosen_authors;
+  //key: author id
+  //value: Counting of all assignment to a author
   unordered_map<int, int> _sum_c_at;
+  //key: topic id
+  //value: Counting of all assignment to a topic 
   unordered_map<int, int> _sum_c_wt;
-  
-  // params
-  double alpha;
-  double beta;
-  int t;
-  int loop_count;
-  int show_limit;
 };
 
 int main(int argc, char** argv){
   //make author_topic
-  //./author_topic [input_file] [alpha] [topic size] [iteration] [show limit]
-  char *filename = argv[1];
+  //./author_topic [input_file] [alpha] [topic size] [iteration]
+  string filename = argv[1];
   //atoi string to integer function
   int topic_size = atoi(argv[3]);
   double alpha = atof(argv[2]);
   double beta = 0.01;
   //Instantiation
-  AuthorTopic t(alpha, beta, topic_size, atoi(argv[4]), atoi(argv[5]));
+  AuthorTopic t(alpha, beta, topic_size, atoi(argv[4]));
   
   ifstream ifs;
   ifs.open(filename, ios::in);
@@ -363,5 +334,10 @@ int main(int argc, char** argv){
   }
   ifs.close();
   t.sampling_all();
+  filename = filename.substr(0,filename.length()-4);
+  filename.append("_topics");
+  filename.append(argv[3]);
+  filename.append("_iters");
+  filename.append(argv[4]);
   t.output(filename);
 }
