@@ -1,0 +1,216 @@
+---
+title: "TweetDataClean"
+author: "CY"
+date: "23/02/2019"
+output: html_document
+---
+
+#Load Packages
+```{r}
+library(stringr)
+library(tm) # Text Mining Package for Tokenization
+library(textclean)
+
+```
+
+```{r}
+# library(dplyr)
+# library(tidyverse) #keepin' things tidy
+# library(tidytext) #package for tidy text analysis (Check out Julia Silge's fab book!)
+# library(glue) #for pasting strings
+# library(data.table) #for rbindlist, a faster version of rbind
+# library(lubridate)
+# library(textstem)  #to lemmatize
+# library(wordcloud2)
+# 
+# library(text2vec)
+# library(glmnet)
+# library(pROC)
+```
+
+
+# Read in Files
+```{r}
+data_an <- read.csv("anondran_tweets.csv", header = T, stringsAsFactors = F, encoding = "UTF-8")
+data_dt <- read.csv("dtapscott_tweets.csv", header = T, stringsAsFactors = F, encoding = "UTF-8")
+data_fran <- read.csv("francispouliot__tweets.csv", header = T, stringsAsFactors = F, encoding = "UTF-8")
+data_Hey <- read.csv("HeyTaiZen_tweets.csv", header = T, stringsAsFactors = F, encoding = "UTF-8")
+data_iam <- read.csv("iamjosephyoung_tweets.csv", header = T, stringsAsFactors = F, encoding = "UTF-8")
+data_jon <- read.csv("jonmatonis_tweets.csv", header = T, stringsAsFactors = F, encoding = "UTF-8")
+data_Tuu <- read.csv("TuurDemeester_tweets.csv", header = T, stringsAsFactors = F, encoding = "UTF-8")
+data_Vin <- read.csv("VinnyLingham_tweets.csv", header = T, stringsAsFactors = F, encoding = "UTF-8")
+data_woo <- read.csv("woonomic_tweets.csv", header = T, stringsAsFactors = F, encoding = "UTF-8")
+
+authorName <- c("anondran", "dtapscott", "francispouliot", "HeyTaiZen", "iamjosephyoung", "jonmatonis", "TuurDemeester", "VinnyLingham", "woonomic")
+authorNameShort <- c("an", "dt", "fran", "Hey", "iam", "jon", "Tuu", "Vin", "woo")
+
+```
+
+# Clean Text
+```{r}
+
+# cleanText <- function(t) {
+#   t.tmp <- tm_map(t, removePunctuation)
+#   t.tmp <- tm_map(t.tmp, stripWhitespace)
+#   t.tmp <- tm_map(t.tmp, tolower)
+#   t.tmp <- tm_map(t.tmp, removeWords, stopwords("english"))
+#   return(t.tmp) 
+# }
+
+# keep no
+keepNONOT <- function(x) gsub("no |not ", "no_", x)
+
+removeURL <- function(x) gsub("http[^[:space:]]*", "", x)
+removeEmoji <- function(x) replace_emoji(x) %>% str_replace_all("\\<.+\\>", "") 
+removeSomePunc <- function(x) gsub("[][!()*,;<=>^|~{}]-", "", x)  # keep %,$,@,#,_,                                          
+
+removeExtraPunc <- function(x) {
+  x <- gsub("\\,|\\!|\\*|\\:", "", x)  # :) x)
+  x <- gsub("'", "", x)
+  x <- gsub('"', "", x)
+  if (!str_detect(x, "[0-9]+\\.[0-9]+")){
+     x <- gsub("\\.", "", x) 
+  } 
+  else {
+    x <- gsub("\\. |\\.^", "", x)
+  }
+  x <- gsub("\\?+", "\\?", x) 
+  return(x)
+}
+# for loop to deal with all authors
+num_author <- length(authorName)
+for (num in 1:num_author){
+  data <- get(paste0("data", "_",authorNameShort[num])) 
+ data$text_clean <- data$text
+ data$text_clean <- data$text_clean %>% tolower()
+ data$text_clean <- data$text_clean %>% removeURL()
+ # Keep No word
+  # data$text_clean <- data$text_clean %>% keepNONOT()
+ data$text_clean <- data$text_clean %>% removeWords( stopwords("en"))
+ # Remove Emoji
+ data$text_clean <- data$text_clean %>% removeEmoji()
+ data$text_clean <- data$text_clean %>%  removeSomePunc()
+  for (i in 1:nrow(data)){
+    data$text_clean[i] <- data$text_clean[i] %>%  removeExtraPunc()  
+  }
+ data$text_clean <- data$text_clean %>%  stripWhitespace()
+ data$text_clean <- data$text_clean %>% str_trim()
+
+  for (i in 1:nrow(data)){
+    data$final[i] <- str_c(authorName[num], str_replace_all(data$text_clean[i], " ", ":"), sep = "\t")   
+  } 
+  assign(paste0("data", "_",authorNameShort[num]), data)
+  #filename_temp <- paste0(authorName[num], "_keepEmojiNo.tsv")
+  #filename_temp <- paste0(authorName[num], "_keepEmoji.tsv")
+  #filename_temp <- paste0(authorName[num], "_keepNo.tsv")
+  #filename_temp <- paste0(authorName[num], "_clean.tsv")
+  #write(data$final, filename_temp)
+}
+
+```
+
+
+# Read in Topic File
+```{r}
+topic_data <- read.csv("no.csv", stringsAsFactors = F, encoding = "UTF-8", header = T)
+```
+
+# Find max Prob for all words and corresponding topics
+```{r}
+word_list_unique <- unique(topic_data$Words) %>% as.data.frame()
+colnames(word_list_unique) <- "unique_word"
+word_list_unique$unique_word <- word_list_unique$unique_word %>% as.character()
+word_list_unique$prob_max <- ""
+word_list_unique$topic <- ""
+for (i in 1:nrow(word_list_unique)){
+  word <- word_list_unique$unique_word[i]
+  word_index <- which(topic_data$Words == word)
+  word_list_unique$prob_max[i] <- max(topic_data$Prob[word_index])  
+  word_list_unique$topic[i] <- topic_data$Topic[word_index[which.max(topic_data$Prob[word_index])]] 
+  # Timer 
+  if (i %% 1000 == 0) print(i)
+}
+```
+
+# Count Frequency in each date for all topics
+```{r}
+
+# Check Time  Starts from 2017-09-12 ends at 2019-01-21
+topic_Frequency_table_2 <- seq(as.Date("2017-09-12"), as.Date("2019-01-21"), by="days") %>% as.data.frame()
+# colnames_topic_freq_table <- c("Date", "Topic1", "Topic2", "Topic3", "Topic4", "Topic5", "Topic6", "Topic7","Topic8", "Topic9", "Topic10", "Frequency")
+colnames(topic_Frequency_table_2) <-"Date"
+# Construct Data Frame
+col_temp <- c("Topic1")
+for (i in 2:100){
+  col_temp <- c(col_temp, paste0("Topic", i))
+}
+topic_Frequency_table <- data.frame(matrix(ncol = 100, nrow = nrow(topic_Frequency_table_2)))
+colnames(topic_Frequency_table)  <- col_temp
+topic_Frequency_table <- cbind(topic_Frequency_table_2, topic_Frequency_table)
+# topic_Frequency_table$Topic1 <- ""
+# topic_Frequency_table$Topic2 <- ""
+# topic_Frequency_table$Topic3 <- ""
+# topic_Frequency_table$Topic4 <- ""
+# topic_Frequency_table$Topic5 <- ""
+# topic_Frequency_table$Topic6 <- ""
+# topic_Frequency_table$Topic7 <- ""
+# topic_Frequency_table$Topic8 <- ""
+# topic_Frequency_table$Topic9 <- ""
+# topic_Frequency_table$Topic10 <- ""
+
+# Function Input one twitter, count frequency of all topics in that twitter
+getFrequency_Topics_oneTwt <- function(str_twt){
+  arr <- rep(0L, 100)
+  twt <- str_split(str_twt, " ")[[1]]
+  for (n in 1:length(twt)){
+    index_num <- which(word_list_unique$unique_word == twt[n])
+    topic_num <- word_list_unique$topic[index_num] %>% as.numeric() + 1
+    arr[topic_num] <- arr[topic_num] + 1 
+  }
+  return(arr)
+}
+
+# Combine data from all authors
+num_author <- length(authorName)
+for (num in 1:num_author){
+  if (num == 1){
+   data_all <- get(paste0("data", "_",authorNameShort[num]))  
+  }
+  else {
+    data_all <- rbind(data_all, get(paste0("data", "_",authorNameShort[num])))
+  }
+}
+
+data_all$created_at <- data_all$created_at %>% as.Date() 
+for (i in 1:nrow(topic_Frequency_table)){
+   day_i <- topic_Frequency_table$Date[i]
+   # Get one day data ie 2017-09-12 data for all authors
+   oneday_data <- subset(data_all, data_all$created_at == day_i)
+   for (j in 1:nrow(oneday_data)){
+      if (j == 1){
+        arr <- getFrequency_Topics_oneTwt(oneday_data$text_clean[j])  
+      }
+      else {
+        arr <- arr + getFrequency_Topics_oneTwt(oneday_data$text_clean[j]) 
+      }
+   }
+   
+   # Store value from arr to topic_Frequency_table
+   for (num in 1:100){
+     temp_topic <- paste0("Topic" ,num)
+     topic_Frequency_table[i, num+1] <- arr[num]
+   }
+   # Timer 
+   if (i %% 100 == 0) print(i)
+}
+```
+
+# Write Csv
+```{r}
+filename1 <- paste0("words_topics.csv")
+write.csv(word_list_unique, filename1, row.names = F)
+filename2 <- paste0("topics_ts.csv")
+write.csv(topic_Frequency_table, filename2, row.names = F)
+```
+
+
