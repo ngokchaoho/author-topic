@@ -116,8 +116,7 @@ for i in range(0, s):
     if direction_real[i] == 1 and direction_predict[i] == 0:
         fn = fn + 1
 
-accuracy = (float(tp) + float(fn)) / s
-print(accuracy)
+
 precision = float(tp) / float(tp + fp)
 recall = float(tp) / float(tp + fn)
 f1score = 2 * (precision * recall) / (precision + recall)
