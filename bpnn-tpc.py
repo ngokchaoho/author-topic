@@ -4,7 +4,7 @@ import numpy as np
 import pylab as pl
 from sklearn.preprocessing import MinMaxScaler
 
-dataa = pd.read_csv("topics2.csv", dtype=float)
+dataa = pd.read_csv("topics_bp_withemoji.csv", dtype=float)
 data = dataa.to_numpy()
 tn_price = data[0:461, 1]
 tn_maa = data[0:461, 2]
@@ -125,7 +125,8 @@ for i in range(0, s):
 
     if direction_real[i] == 1 and direction_predict[i] == 0:
         fn = fn + 1
-
+accuracy = (float(tp) + float(fn)) / s
+print(accuracy)
 precision = float(tp) / float(tp + fp)
 recall = float(tp) / float(tp + fn)
 f1score = 2 * (precision * recall) / (precision + recall)

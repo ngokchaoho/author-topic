@@ -13,7 +13,7 @@ import pylab as pl
 
 
 
-data=pd.read_csv("/Users/ziruilian/Desktop/RNN/topic3.csv")
+data=pd.read_csv("topic3.csv")
 data1 = data.to_numpy()
 
 t2 = data1[5:466, 1]
@@ -167,7 +167,7 @@ for i in range(0, 30):
 tp = 0
 fp = 0
 fn = 0
-
+tn = 0 
 for i in range(0, 30):
     if direction_real[i] == 1 and direction_predict[i] == 1:
         tp = tp + 1
@@ -177,7 +177,10 @@ for i in range(0, 30):
 
     if direction_real[i] == 1 and direction_predict[i] == 0:
         fn = fn + 1
-
+    if direction_real[i] == 0 and direction_predict[i] == 0:
+        tn = tn + 1
+accuracy = (float(tp) + float(tn)) / 30
+print(accuracy)
 precision = float(tp) / float(tp + fp)
 recall = float(tp) / float(tp + fn)
 f1score = 2 * (precision * recall) / (precision + recall)
